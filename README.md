@@ -4,6 +4,8 @@ This programs allows you to bulk upload a list of boar dgames to your BGG collec
 
 You need to provide the BGG ID of each game. [This website](https://github.com/fenglisch/bgg-names-to-ids) identifies the ID's of your board games, given a list of their names.
 
+See also the thread on BGG, where this tool is discussed: https://boardgamegeek.com/thread/3045904/new-program-to-bulk-upload-import-board-games-to-y
+
 ## How to setup
 
 **Prerequisites**: You need to have `node` and `npm` installed (see [instructions](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm)). You also need Google Chrome or Firefox. Google Chrome is set as the default browser. If you want to use Firefox, you must explicitly specify that when exectuting the program (see "Additional options").
@@ -88,13 +90,12 @@ $ node bgg-bulk-upload.js Desktop/Boardgames/list-of-ids.csv -u gamingFreak3000 
 ### Additional options
 
 - `firefox` - The default browser is Google Chrome. If you want to use Firefox instead, just add `firefox` at the end of your command.
-- `show-browser` - By default, the program uses a headless browser, which runs invisibly in the background and therefore has a better perfomance. If you want to watch the browser navigate to all the pages and click the buttons, add `show-browser` at the end of your command. This is recommended for debugging in particular.
-- `debugging-mode` - By default, the programm logs the number of ID's it found in your already existing BGG collection and in the file you uploaded, as well as the resulting number of new ID's to be added. When `debugging-mode` is activated, the program will not only log each number, but the full list of ID's. Also, when `show-browser` is also set, the browser will not automatically close at the end after it finished processing.
+- `debugging-mode` - By default, the programm logs the number of ID's it found in your already existing BGG collection and in the file you uploaded, as well as the resulting number of new ID's to be added. When `debugging-mode` is activated, the program will not only log each number, but the full list of ID's.
 
 Our previous example would look as follows, when all additional options are set:
 
 ```
-$ node bgg-bulk-upload.js Desktop/Boardgames/list-of-ids.csv -u gamingFreak3000 -p 12345678 firefox show-browser debugging-mode
+$ node bgg-bulk-upload.js Desktop/Boardgames/list-of-ids.csv -u gamingFreak3000 -p 12345678 firefox debugging-mode
 ```
 
 (The order of the additional options does not matter.)
@@ -105,9 +106,11 @@ The file must include a semicolon-separated list of the ID's to be added. It doe
 
 ## How it works
 
-The program reads the ID's from the input file. It then compares them to the ID's which are already in the user's collection. To do that, it sends a http request to XML API2 of BoardGameGeek. After this comparision, the program knows which of the ID's of the input file are actually new ID's to be added to the collection.
-
-It then starts a browser session (Chrome or Firefox, as you wish) with Selenium webdriver. After logging in, it navigates to the pages of all the games specified by the ID's. Here, it clicks the buttons to add each game to the user's collection. This continues until all ID's are processed (or until something occured that lead to an abortion).
+- The program reads the ID's from the input file. 
+- It then starts a browser session (Chrome or Firefox, as you wish) with Selenium webdriver and logs into your account, using the credentials you provided.
+- Now it navigates to your collection to scrape the ID's of the games you already have in your collection (before the changes to the BGG API policy in 2025, the XML API was used, but this does not work anymore). 
+- After the comparision of imported and already existing ID's, the program knows which of the ID's of the input file are actually new ID's to be added to the collection.
+- Now, it navigates to the pages of all the games specified by the ID's. Here, it clicks the buttons to add each game to the user's collection. This continues until all ID's are processed (or until something occured that lead to an abortion).
 
 ## Performance / Speed
 
