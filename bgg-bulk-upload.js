@@ -66,17 +66,17 @@ function getCredentials(flag) {
   try {
     const indexOfFlag = process.argv.indexOf(flag);
     if (indexOfFlag === -1) throw new Error();
-    // Syntax is "$ node index.js -u your_username -p your_password", therefore the value of username/password is next item after the flag
+    // Syntax is "$ node index.js -u your_username -p your_password -t your_api_token", therefore the value of username/password/API token is next item after the flag
     const credential = process.argv[indexOfFlag + 1];
     if (!credential) throw new Error();
     return credential;
   } catch (error) {
     console.log(
       RED,
-      "Please provide your username and password. Follow the following syntax:"
+      "Please provide your username, password, and API token. Follow the following syntax:"
     );
     console.log(
-      "$ node index.js PATH/TO/listOfIds.csv -u your_username -p your_password"
+      "$ node index.js PATH/TO/listOfIds.csv -u your_username -p your_password -t your_api_token"
     );
     throw new Error();
   }
@@ -84,6 +84,7 @@ function getCredentials(flag) {
 
 const userName = getCredentials("-u");
 const password = getCredentials("-p");
+const BGG_API_TOKEN = getCredentials("-t");
 
 function getIdsFromFile() {
   try {
@@ -105,7 +106,7 @@ function getIdsFromFile() {
       "[Error] Could not read content of file. Please check the path and use this syntax:"
     );
     console.log(
-      "$ node index.js PATH/TO/listOfIds.csv -u your_username -p your_password"
+      "$ node index.js PATH/TO/listOfIds.csv -u your_username -p your_password -t your_api_token"
     );
     if (isDebuggingMode) console.log(err);
     process.exit();
@@ -141,7 +142,11 @@ async function getIdsAlreadyInCollection() {
 
 async function makeHttpRequest(url) {
   try {
-    const res = await axios.get(url);
+    const res = await axios.get(url, {
+      headers: {
+        "Authorization": BGG_API_TOKEN,
+      },
+    });
     if (res.status === 202) {
       console.log(
         YELLOW,
@@ -180,7 +185,7 @@ async function makeHttpRequest(url) {
 
 async function addGamesToCollection(arIdsToBeAdded) {
   const options = new browserPackage.Options();
-  // Chrome and Firefox have different synntax: --headless vs. -headless
+    // Chrome and Firefox have different synntax: --headless vs. -headless
   if (!process.argv.includes("show-browser")) {
     if (browser === "firefox") options.addArguments("-headless");
     else options.addArguments("--headless");
@@ -195,21 +200,31 @@ async function addGamesToCollection(arIdsToBeAdded) {
     await driver.get(`${BASE_URL}/login`);
     console.log(RESET, "[Status update] Logging in.");
     await driver.sleep(3000);
-    await driver.findElement(By.id("inputUsername")).sendKeys(userName);
-    await driver
-      .findElement(By.id("inputPassword"))
-      .sendKeys(password, Key.RETURN);
-    // Give the front page some time to load before checking if login was successful
+    const usernameField = await driver.wait(
+      until.elementLocated(By.id("inputUsername")),
+      10000
+    );
+    await driver.wait(until.elementIsVisible(usernameField), 5000);
+    await usernameField.sendKeys(userName);
+    const passwordField = await driver.findElement(By.id("inputPassword"));
+    await passwordField.sendKeys(password);
+    await driver.sleep(500);
+    await driver.findElement(
+      By.xpath("//button[contains(@class,'btn-primary') and contains(text(),'Sign In')]")
+    ).click();
     await driver.sleep(5000);
     const pageTitle = await driver.getTitle();
-    if (pageTitle !== "BoardGameGeek | Gaming Unplugged Since 2000")
+    if (isDebuggingMode) console.log(RESET, `[Debug] Page title after login: "${pageTitle}"`);
+    if (!pageTitle.includes("BoardGameGeek")) {
       throw "[Error] Login failed. Please check username and password";
+    }
     console.log(GREEN, "[Success] Login succeeded.");
 
     // Using a "for... of" loop in order to wait for each iteration to finish before starting the next one, unlike forEach loops
     for (const [index, id] of arIdsToBeAdded.entries()) {
       try {
         await driver.get(`${BASE_URL}/boardgame/${id}`);
+		await driver.sleep(1000);
         const gameTitle = language
           ? await addVersionOfGame(driver, id)
           : await addGameWithoutVersion(driver);
@@ -272,27 +287,28 @@ async function addGameWithoutVersion(driver) {
         By.xpath("//button[@ng-disabled='colltoolbarctrl.loading']")
       )
     ),
-    10000
+    15000
   );
-  await driver.sleep(1000);
+  await driver.sleep(2000);
   // Clicking the button "Add To Collection"
   // The normal method driver.findElement().click() does not work for the "Add To Collection" button, it throws the error:
   // "ElementNotInteractableError: Element <button class="btn btn-sm btn-primary toolbar-action-full"> could not be scrolled into view"
   await driver.executeScript(
     `document.querySelector("[ng-disabled='colltoolbarctrl.loading']").click();`
   );
-  await driver.sleep(500);
+  await driver.sleep(1500);
 
   // Checking the checkbox "Own"
   await driver.executeScript(
     `document.querySelector("[ng-model='item.status.own']").click();`
   );
-  await driver.sleep(500);
+  await driver.sleep(1000);
 
   // Saving
   await driver.executeScript(
     `document.querySelector("[ng-disabled='editctrl.saving']").click();`
   );
+  await driver.sleep(2000);
   // Getting the title of the page / the game to log it in the parent function
   const pageTitle = await driver.getTitle();
   // Remove everything after the first pipe character
@@ -304,16 +320,17 @@ async function addVersionOfGame(driver, id) {
   await driver.get(
     `${urlOverviewTab}/versions?pageid=1&language=${dictLangToId[language]}`
   );
-  await driver.sleep(1500);
+  await driver.sleep(3000);
   try {
     await driver.executeScript(
       `document.querySelector("ul.summary-border > li:last-child button[add-to-collection-button]").click()`
     );
-    await driver.sleep(1000);
+    await driver.sleep(2000);
     // The checkbox "Own" is already checked by default, therefore directly click the button "Save"
     await driver.executeScript(
       `document.querySelector("[ng-disabled='editctrl.saving']").click();`
     );
+	await driver.sleep(2000);
     // Get the title of the added version to log it in the parent function
     // Remove tabs, the unnecessary substring "Name Pending" and unnecessary spaces
     return await driver.executeScript(
